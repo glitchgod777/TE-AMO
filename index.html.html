@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corazón Mágico de Partículas</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Poppins', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        .info {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const infoText = document.querySelector('.info');
+        let particles = [];
+        let isFormed = false;
+        const formationDelay = 4000;
+        const numParticles = 3000;
+
+        const mouse = {
+            x: null,
+            y: null,
+            radius: 100 
+        };
+
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = event.x;
+            mouse.y = event.y;
+        });
+        
+        window.addEventListener('mouseout', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 2.5 + 1;
+                this.baseX = this.x;
+                this.baseY = this.y;
+                this.density = (Math.random() * 40) + 5;
+                this.targetX = null;
+                this.targetY = null;
+                this.speed = 0.05;
+                this.color = `hsl(${Math.random() * 60 + 300}, 100%, 70%)`;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+            update() {
+                if (isFormed && this.targetX !== null) {
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    this.x += dx * this.speed;
+                    this.y += dy * this.speed;
+                } else {
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    if (this.x > canvas.width || this.x < 0) this.vx *= -1;
+                    if (this.y > canvas.height || this.y < 0) this.vy *= -1;
+                }
+                
+                const dxMouse = this.x - mouse.x;
+                const dyMouse = this.y - mouse.y;
+                const distanceMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
+
+                if (distanceMouse < mouse.radius) {
+                    const forceDirectionX = dxMouse / distanceMouse;
+                    const forceDirectionY = dyMouse / distanceMouse;
+                    const force = (mouse.radius - distanceMouse) / mouse.radius;
+                    const directionX = forceDirectionX * force * this.density * 0.2;
+                    const directionY = forceDirectionY * force * this.density * 0.2;
+
+                    this.x += directionX;
+                    this.y += directionY;
+                }
+            }
+            
+            setTarget(x, y) {
+                this.targetX = x;
+                this.targetY = y;
+            }
+        }
+        
+        function generateTargetPoints() {
+            const targetPoints = [];
+            const heartScale = Math.min(canvas.width, canvas.height) * 0.4;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            for (let t = 0; t < Math.PI * 2; t += 0.02) {
+                const x = centerX - 16 * Math.pow(Math.sin(t), 3) * (heartScale / 20);
+                const y = centerY - (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * (heartScale / 20);
+                targetPoints.push({ x, y });
+            }
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            
+            const fontSize = Math.min(canvas.width, canvas.height) * 0.1;
+            tempCtx.fillStyle = 'white';
+            tempCtx.font = `bold ${fontSize}px 'Poppins', sans-serif`;
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'middle';
+            tempCtx.fillText('Eu te Amo', centerX, centerY + 20);
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+            
+            for (let y = 0; y < tempCanvas.height; y += 4) {
+                for (let x = 0; x < tempCanvas.width; x += 4) {
+                    // El índice del alfa del píxel
+                    const alphaIndex = (y * tempCanvas.width + x) * 4 + 3;
+                    if (data[alphaIndex] > 128) { 
+                        targetPoints.push({ x: x, y: y });
+                    }
+                }
+            }
+
+            return targetPoints;
+        }
+
+        // --- Main Logic ---
+        function init() {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle(Math.random() * canvas.width, Math.random() * canvas.height));
+            }
+            
+            setTimeout(() => {
+                const targetPoints = generateTargetPoints();
+                if (targetPoints.length === 0) {
+                    console.error("No se generaron puntos de destino. ¿El texto es visible?");
+                    return;
+                }
+
+                particles.forEach((particle, i) => {
+                    const target = targetPoints[i % targetPoints.length];
+                    particle.setTarget(target.x, target.y);
+                });
+                
+                isFormed = true;
+                infoText.style.opacity = '0'; 
+            }, formationDelay);
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (const particle of particles) {
+                particle.update();
+                particle.draw();
+            }
+            requestAnimationFrame(animate);
+        }
+        
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            isFormed = false;
+            infoText.style.opacity = '1';
+            mouse.radius = 100;
+            init();
+        });
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
